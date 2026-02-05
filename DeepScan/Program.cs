@@ -35,7 +35,10 @@ class Program
         var engine = new DetectionEngine();
 
         // Register all modules
+        // Order: User-mode detection first, then kernel trust verification (if driver available),
+        // then remaining Ring 0 checks, followed by deeper ring levels
         engine.RegisterModule(new Ring3Module());
+        engine.RegisterModule(new KernelTrustModule());  // Uses kernel driver for trusted enumeration
         engine.RegisterModule(new Ring0Module());
         engine.RegisterModule(new HypervisorModule());
         engine.RegisterModule(new FirmwareModule());

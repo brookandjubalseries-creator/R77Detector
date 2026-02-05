@@ -1,0 +1,80 @@
+;
+; R77Driver.inf
+;
+; Installation file for R77 Detector Kernel Driver
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System
+ClassGuid   = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider    = %ManufacturerName%
+CatalogFile = R77Driver.cat
+DriverVer   = 01/01/2024,1.0.0.0
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 12
+R77Driver_Device_CoInstaller_CopyFiles = 11
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+R77Driver.sys = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NTamd64,NTx86
+
+[Standard.NTamd64]
+%R77Driver.DeviceDesc% = R77Driver_Device, Root\R77Driver
+
+[Standard.NTx86]
+%R77Driver.DeviceDesc% = R77Driver_Device, Root\R77Driver
+
+[R77Driver_Device.NT]
+CopyFiles = Drivers_Dir
+
+[Drivers_Dir]
+R77Driver.sys
+
+;-------------- Service installation
+[R77Driver_Device.NT.Services]
+AddService = R77Driver,%SPSVCINST_ASSOCSERVICE%, R77Driver_Service_Inst
+
+; -------------- R77Driver driver install sections
+[R77Driver_Service_Inst]
+DisplayName    = %R77Driver.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\R77Driver.sys
+LoadOrderGroup = Extended Base
+
+;
+;--- R77Driver_Device Coinstaller installation ------
+;
+
+[R77Driver_Device.NT.CoInstallers]
+AddReg = R77Driver_Device_CoInstaller_AddReg
+CopyFiles = R77Driver_Device_CoInstaller_CopyFiles
+
+[R77Driver_Device_CoInstaller_AddReg]
+; No co-installers needed
+
+[R77Driver_Device_CoInstaller_CopyFiles]
+; No co-installer files
+
+[R77Driver_Device.NT.Wdf]
+; Not using KMDF - pure WDM driver
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ManufacturerName = "R77Detector"
+DiskName = "R77 Detector Driver Installation Disk"
+R77Driver.DeviceDesc = "R77 Detector Kernel Driver"
+R77Driver.SVCDESC = "R77 Detector Driver Service"

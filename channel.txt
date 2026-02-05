@@ -1,0 +1,234 @@
+# R77Detector Kernel Driver Development Channel
+# Agents communicate here to coordinate development
+# Format: [AGENT_NAME] [TIMESTAMP] - Message
+
+=== PROJECT KICKOFF ===
+[COORDINATOR] - Starting multi-agent kernel driver development
+[COORDINATOR] - Goal: Add kernel-mode driver for trusted system enumeration
+
+Components to develop:
+1. KERNEL_DRIVER - Ring 0 driver for process/driver enumeration
+2. USER_INTERFACE - User-mode library to communicate with driver
+3. DEEPSCAN_INTEGRATION - Update DeepScan to use kernel data
+4. BUILD_SYSTEM - WDK build configuration and signing
+
+Agents, please check in and begin work on your assigned component.
+Post updates and questions here.
+
+=== AGENT MESSAGES ===
+[USERMODE_DEV] - Checking in. Starting work on KernelBridge C# library.
+[USERMODE_DEV] - Will create: KernelBridge.cs, Structures.cs, NativeMethods.cs, KernelBridge.csproj
+[USERMODE_DEV] - Using device name: \\.\R77DetectorDriver
+[USERMODE_DEV] - IOCTL codes will use device type 0x8000 (custom) with function codes 0x800-0x803
+
+[INTEGRATION] - Starting DeepScan integration work. Waiting for KERNEL_DEV and USERMODE_DEV to complete their components.
+[INTEGRATION] - I've reviewed the existing DeepScan codebase structure:
+  - Detection engine with module registration pattern (IDetectionModule interface)
+  - Existing modules: Ring3Module, Ring0Module, HypervisorModule, FirmwareModule, ManagementEngineModule
+  - Will create KernelTrustModule following the same pattern
+[INTEGRATION] - Ready to integrate once KernelBridge library is available. Please post when ready.
+
+[INTEGRATION] - Reviewed R77Driver.h - I have enough information from the header to proceed.
+[INTEGRATION] - Available structures: R77_PROCESS_INFO, R77_DRIVER_INFO, R77_SSDT_HOOK_INFO, R77_CALLBACK_INFO
+[INTEGRATION] - IOCTLs: ENUM_PROCESSES, ENUM_DRIVERS, DETECT_SSDT_HOOKS, ENUM_CALLBACKS, GET_HIDDEN_PROCESSES
+[INTEGRATION] - Beginning KernelTrustModule implementation now...
+
+[ARCHITECT] - Architecture document complete: KernelDriver/ARCHITECTURE.md
+[ARCHITECT] - Design Summary:
+  - Device: \\.\R77Detector (via \Device\R77Detector)
+  - 12 IOCTL codes defined (0x222000 - 0x22202C)
+  - Key IOCTLs:
+    * IOCTL_R77_GET_VERSION (0x222000) - Driver version info
+    * IOCTL_R77_ENUM_PROCESSES (0x222004) - Trusted process enumeration
+    * IOCTL_R77_ENUM_DRIVERS (0x222008) - Driver/module enumeration
+    * IOCTL_R77_ENUM_SSDT (0x22200C) - Get SSDT entries
+    * IOCTL_R77_CHECK_SSDT_HOOKS (0x222010) - SSDT hook detection
+    * IOCTL_R77_ENUM_PROCESS_CALLBACKS (0x222014) - Process creation callbacks
+    * IOCTL_R77_ENUM_THREAD_CALLBACKS (0x222018) - Thread creation callbacks
+    * IOCTL_R77_ENUM_IMAGE_CALLBACKS (0x22201C) - Image load callbacks
+    * IOCTL_R77_ENUM_REGISTRY_CALLBACKS (0x222020) - Registry callbacks
+    * IOCTL_R77_GET_PROCESS_INFO (0x222024) - Detailed process info
+    * IOCTL_R77_VERIFY_DRIVER_INTEGRITY (0x222028) - Driver code integrity
+    * IOCTL_R77_ENUM_HIDDEN_PROCESSES (0x22202C) - DKOM-hidden process detection
+[ARCHITECT] - Data structures defined:
+  - R77_RESPONSE_HEADER / R77_REQUEST_HEADER (common headers)
+  - R77_PROCESS_ENTRY (full process details with flags)
+  - R77_DRIVER_ENTRY (driver info with integrity hashes)
+  - R77_SSDT_ENTRY / R77_SSDT_HOOK_INFO (SSDT analysis)
+  - R77_CALLBACK_ENTRY (callback enumeration)
+  - R77_HIDDEN_PROCESS_ENTRY (hidden process detection results)
+[ARCHITECT] - Security model:
+  - Admin-only device access via SDDL
+  - Input validation on all IOCTLs
+  - SEH protection for user buffer access
+  - Rate limiting recommendations
+[ARCHITECT] - Detection techniques documented:
+  1. EPROCESS list walking (bypasses DKOM unlinking)
+  2. PspCidTable scanning (finds PID-spoofed processes)
+  3. Thread-based process discovery
+  4. Handle table scanning for hidden process references
+  5. SSDT integrity verification against disk ntoskrnl
+  6. Callback array enumeration (Ps*, Cm*, Ob*)
+[ARCHITECT] - NOTE TO USERMODE_DEV: Please align your implementation to use:
+  - Device name: \\.\R77Detector (not R77DetectorDriver)
+  - Device type: FILE_DEVICE_UNKNOWN (0x22) not 0x8000
+  - See ARCHITECTURE.md Appendix A for IOCTL code calculations
+[ARCHITECT] - NOTE TO INTEGRATION: Appendix C contains example C# KernelModule integration code
+[ARCHITECT] - Architecture ready for implementation. Awaiting KERNEL_DEV to begin driver coding.
+
+[KERNEL_DEV] - Checking in. Beginning kernel driver implementation.
+
+[KERNEL_DEV] - COMPLETED: R77Driver.h
+  - Device name: \\Device\\R77Detector, symlink: \\DosDevices\\R77Detector
+  - Pool tag: 'r77D'
+  - IOCTL codes defined using FILE_DEVICE_UNKNOWN (0x22):
+    * IOCTL_R77_ENUM_PROCESSES (function 0x801)
+    * IOCTL_R77_ENUM_DRIVERS (function 0x802)
+    * IOCTL_R77_DETECT_SSDT_HOOKS (function 0x803)
+    * IOCTL_R77_ENUM_CALLBACKS (function 0x804)
+    * IOCTL_R77_GET_HIDDEN_PROCESSES (function 0x805)
+    * IOCTL_R77_GET_VERSION (function 0x806)
+  - Structures: R77_PROCESS_INFO, R77_DRIVER_INFO, R77_SSDT_HOOK_INFO, R77_CALLBACK_INFO
+  - Result containers with Count/HiddenCount fields
+
+[KERNEL_DEV] - COMPLETED: R77Driver.c (Main driver)
+  - DriverEntry with IoCreateDevice and IoCreateSymbolicLink
+  - DriverUnload with proper cleanup
+  - IRP_MJ_CREATE/CLOSE handlers
+  - IRP_MJ_DEVICE_CONTROL dispatcher for all IOCTLs
+  - Pool allocation wrappers with tags
+  - Proper buffered I/O setup
+
+[KERNEL_DEV] - COMPLETED: ProcessEnum.c
+  - EPROCESS list walking via ActiveProcessLinks
+  - Dynamic offset resolution for Windows 10/11 builds
+  - Hidden process detection by comparing kernel list vs ZwQuerySystemInformation
+  - R77EnumProcesses() - returns all processes
+  - R77GetHiddenProcesses() - returns only hidden (DKOM-unlinked) processes
+
+[KERNEL_DEV] - COMPLETED: DriverEnum.c
+  - PsLoadedModuleList enumeration via MmGetSystemRoutineAddress
+  - LDR_DATA_TABLE_ENTRY walking with proper IRQL handling
+  - Hidden driver detection by comparing kernel list vs SystemModuleInformation
+  - R77EnumDrivers() - returns all loaded drivers
+  - R77GetModuleByAddress() - helper for finding module containing an address
+
+[KERNEL_DEV] - COMPLETED: HookDetect.c
+  - SSDT hook detection via KeServiceDescriptorTable
+  - x64 offset decoding (Entry >> 4) and x86 direct address handling
+  - Hooks identified by checking if function is outside ntoskrnl bounds
+  - Module name resolution for hook targets
+  - R77DetectSsdtHooks() - returns hooked SSDT entries
+  - R77EnumCallbacks() - placeholder for callback enumeration
+    (NOTE: Full implementation requires pattern scanning for unexported arrays)
+
+[KERNEL_DEV] - COMPLETED: Build files
+  - sources (WDK build)
+  - makefile (WDK build)
+  - R77Driver.vcxproj (Visual Studio 2019/2022)
+  - R77Driver.inf (driver installation)
+  - BUILD.md (build and installation instructions)
+
+[KERNEL_DEV] - All files created in: C:\Users\Purge\Desktop\R77Detector\KernelDriver\
+
+[KERNEL_DEV] - NOTES FOR USERMODE_DEV:
+  - Use device path: \\\\.\\R77Detector
+  - All IOCTLs use METHOD_BUFFERED
+  - Output buffer size should be calculated:
+    * Processes: FIELD_OFFSET(R77_PROCESS_ENUM_RESULT, Processes) + (MAX_PROCESSES * sizeof(R77_PROCESS_INFO))
+    * Drivers: FIELD_OFFSET(R77_DRIVER_ENUM_RESULT, Drivers) + (MAX_DRIVERS * sizeof(R77_DRIVER_INFO))
+  - STATUS_BUFFER_TOO_SMALL returns required size in BytesReturned
+
+[KERNEL_DEV] - NOTES FOR BUILD_SYSTEM:
+  - Driver requires test signing or production code signing
+  - Target Windows 10/11 x64 primarily (x86 support included)
+  - EPROCESS offsets may need adjustment for specific Windows builds
+
+[KERNEL_DEV] - Kernel driver implementation COMPLETE. Ready for integration testing.
+
+[INTEGRATION] - COMPLETED: DeepScan integration with kernel driver
+[INTEGRATION] - Files created/modified:
+  1. DeepScan\DeepScan.csproj - Added ProjectReference to KernelBridge
+  2. DeepScan\Modules\KernelTrustModule.cs - NEW FILE: Full kernel trust verification module
+  3. DeepScan\Program.cs - Registered KernelTrustModule in detection engine
+
+[INTEGRATION] - KernelTrustModule features:
+  - Tries to connect to \\.\R77Detector driver
+  - If driver available:
+    * IOCTL_R77_GET_VERSION - Verifies driver version
+    * IOCTL_R77_ENUM_PROCESSES - Gets trusted process list from kernel
+    * IOCTL_R77_ENUM_DRIVERS - Gets trusted driver list
+    * IOCTL_R77_CHECK_SSDT_HOOKS - Detects SSDT hooks
+    * IOCTL_R77_ENUM_CALLBACKS - Finds suspicious kernel callbacks
+  - Compares kernel vs user-mode process lists to find hidden processes
+  - Reports DKOM (Direct Kernel Object Manipulation) when detected
+  - Falls back gracefully to user-mode cross-reference if driver not loaded
+
+[INTEGRATION] - IOCTL codes matched to R77Driver.h:
+  - Device: FILE_DEVICE_UNKNOWN (0x22)
+  - Access: FILE_READ_ACCESS
+  - Method: METHOD_BUFFERED
+  - Function codes: 0x801-0x806
+
+[INTEGRATION] - Detection categories added:
+  - "Hidden Process" (CRITICAL) - Process visible to kernel but not user-mode
+  - "DKOM Detection" (CRITICAL) - Processes unlinked from ActiveProcessLinks
+  - "SSDT Hooks" (CRITICAL) - Kernel syscalls being intercepted
+  - "Hidden Drivers" (CRITICAL) - Drivers not in PsLoadedModuleList
+  - "Suspicious Callbacks" (HIGH) - Callbacks from unknown modules
+
+[INTEGRATION] - DeepScan integration COMPLETE. Ready for testing with kernel driver.
+
+[USERMODE_DEV] - COMPLETED: KernelBridge C# library aligned with ARCHITECTURE.md
+[USERMODE_DEV] - Updated to use correct device name: \\.\R77Detector
+[USERMODE_DEV] - Updated to use FILE_DEVICE_UNKNOWN (0x22) instead of 0x8000
+[USERMODE_DEV] - Files created in: C:\Users\Purge\Desktop\R77Detector\KernelDriver\UserMode\
+[USERMODE_DEV] -
+[USERMODE_DEV] - KernelBridge.csproj:
+  - .NET 8.0 class library targeting x64
+  - AllowUnsafeBlocks enabled for P/Invoke
+  - Namespace: R77Detector.KernelBridge
+
+[USERMODE_DEV] - NativeMethods.cs:
+  - CreateFile, DeviceIoControl P/Invoke declarations
+  - Service Control Manager APIs for driver loading/unloading
+  - CTL_CODE helper method for IOCTL construction
+  - FILE_DEVICE_UNKNOWN constant (0x22)
+
+[USERMODE_DEV] - Structures.cs:
+  - R77ResponseHeader / R77RequestHeader matching ARCHITECTURE.md
+  - R77VersionInfo, R77Features
+  - KernelProcessInfoNative / KernelProcessInfo (with R77ProcessFlags)
+  - KernelDriverInfoNative / KernelDriverInfo (with R77DriverFlags)
+  - SsdtHookInfoNative / SsdtHookInfo
+  - CallbackInfoNative / CallbackInfo (with CallbackType enum)
+  - HiddenProcessDetectionMethod, HiddenProcessRequest, HiddenProcessInfo
+  - All 12 IOCTL codes defined with correct values (0x222000 - 0x22202C)
+
+[USERMODE_DEV] - KernelBridge.cs (implements IDisposable):
+  - LoadDriver() - Loads driver via SCM and connects
+  - TryConnect() - Connects to already-loaded driver
+  - UnloadDriver() - Stops and removes driver service
+  - GetVersion() - IOCTL_R77_GET_VERSION
+  - GetProcessList() - IOCTL_R77_ENUM_PROCESSES
+  - GetDriverList() - IOCTL_R77_ENUM_DRIVERS
+  - GetSsdtHooks() - IOCTL_R77_CHECK_SSDT_HOOKS
+  - GetCallbacks() - Aggregates all callback types
+  - GetProcessCallbacks/ThreadCallbacks/ImageLoadCallbacks/RegistryCallbacks
+  - GetHiddenProcesses() - IOCTL_R77_ENUM_HIDDEN_PROCESSES
+  - VerifyDriverIntegrity() - IOCTL_R77_VERIFY_DRIVER_INTEGRITY
+  - Proper handle cleanup, error tracking (LastError, LastErrorCode)
+  - Thread-safe with lock object
+
+[USERMODE_DEV] - NOTES FOR INTEGRATION:
+  - Example usage:
+    using var bridge = new KernelBridge();
+    if (bridge.TryConnect()) {
+        var processes = bridge.GetProcessList();
+        var hidden = processes.Where(p => p.IsHidden).ToList();
+    }
+  - Check bridge.LastError if operations fail
+  - Use GetVersion() to verify driver compatibility
+
+[USERMODE_DEV] - KernelBridge library COMPLETE. Ready for integration.
+
