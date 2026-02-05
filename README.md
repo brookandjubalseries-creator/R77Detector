@@ -19,6 +19,7 @@ A multi-ring rootkit detection system for Windows that scans from Ring 3 (User M
 - **R77Detector** - Console-based detector with direct syscalls to bypass usermode API hooks
 - **R77DetectorGUI** - WPF GUI with cybersecurity-themed interface
 - **DeepScan** - Advanced multi-ring scanner with remediation capabilities
+- **KernelDriver** - Ring 0 kernel driver for trusted system enumeration (bypasses DKOM)
 - **R77TestSuite** - Deploys harmless mock indicators to test detection
 
 ## Building
@@ -102,6 +103,35 @@ var syscallProcesses = DirectSyscalls.GetProcessList();
 ### Driver Signature Verification
 
 Uses `WinVerifyTrust` API for proper Authenticode verification, handling both embedded and catalog-signed drivers to avoid false positives on legitimate Windows drivers.
+
+### Kernel Driver (R77Driver.sys)
+
+The kernel driver provides trusted system enumeration that cannot be fooled by usermode rootkits:
+
+| IOCTL | Function | Description |
+|-------|----------|-------------|
+| IOCTL_R77_ENUM_PROCESSES | 0x222004 | Enumerate processes from EPROCESS linked list |
+| IOCTL_R77_ENUM_DRIVERS | 0x222008 | Enumerate drivers from PsLoadedModuleList |
+| IOCTL_R77_CHECK_SSDT_HOOKS | 0x222010 | Detect SSDT hook modifications |
+| IOCTL_R77_ENUM_CALLBACKS | 0x222014-20 | List kernel callbacks (process/thread/image/registry) |
+| IOCTL_R77_ENUM_HIDDEN_PROCESSES | 0x22202C | Find DKOM-hidden processes |
+
+**Building the Driver:**
+```bash
+# Requires Windows Driver Kit (WDK)
+cd KernelDriver
+# Open R77Driver.vcxproj in Visual Studio with WDK installed
+# Build for x64 Release
+```
+
+**Installing (requires test signing or code signing certificate):**
+```bash
+bcdedit /set testsigning on  # Enable test signing (reboot required)
+sc create R77Driver type= kernel binPath= C:\path\to\R77Driver.sys
+sc start R77Driver
+```
+
+See `KernelDriver/BUILD.md` for detailed instructions.
 
 ## Screenshots
 
